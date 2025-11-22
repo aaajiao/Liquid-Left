@@ -1,7 +1,7 @@
 
 import { create } from 'zustand';
 import * as THREE from 'three';
-import { playBubblePop, playFloodSound, playSunExtinguish } from './utils/audio';
+import { playBubblePop, playFloodSound, playSunExtinguish, playLeafSuccess } from './utils/audio';
 
 export interface NodeData {
   id: string;
@@ -60,6 +60,7 @@ interface GameState {
   
   // Wind (Ch5)
   leafHealth: number; // 0 to 100
+  lastBlockTime: number; // Timestamp for player visual feedback
   
   // Sun (Finale)
   rainLevel: number;
@@ -87,7 +88,10 @@ interface GameState {
   popBubble: (id: string) => void;
   absorbFragment: (id: string) => void;
   growPlayer: (amount: number) => void;
+  hoverFleshBall: () => void; // New Action
+  damageLeaf: (amount: number) => void;
   healLeaf: (amount: number) => void;
+  triggerPlayerBlock: () => void;
   triggerRain: () => void;
   selectVehicle: (type: string) => void;
 }
@@ -148,10 +152,10 @@ const generateChewingEnv = () => {
 
 const generateWindEnv = () => {
     const env: EnvFeature[] = [];
-    // Wind Source
-    env.push({ id: 'wind-emitter', type: 'WIND_EMITTER', position: [0, 2, -10], scale: [1, 1, 1], color: '#fff' });
-    // Withered Leaf
-    env.push({ id: 'withered-leaf', type: 'WITHERED_LEAF', position: [0, 1, 5], scale: [2, 2, 2], color: '#8b4513' });
+    // Wind Source (Far away)
+    env.push({ id: 'wind-emitter', type: 'WIND_EMITTER', position: [0, 2, -15], scale: [1, 1, 1], color: '#fff' });
+    // Withered Leaf (Behind player)
+    env.push({ id: 'withered-leaf', type: 'WITHERED_LEAF', position: [0, 0.1, 8], scale: [3, 3, 3], color: '#8b4513' });
     return { nodes: [], env };
 };
 
@@ -201,7 +205,7 @@ const START_POSITIONS: Record<LevelType, [number, number, number]> = {
     CHAPTER_1: [0, 0.5, 8],
     NAME: [0, 0.5, 0],
     CHEWING: [0, 0.5, -8],
-    WIND: [0, 0.5, 8],
+    WIND: [0, 0.5, 0], // Start in middle to intercept wind
     TRAVEL: [0, 0.5, 0],
     CONNECTION: [0, 0.5, 8],
     HOME: [0, 0.5, 5],
@@ -233,6 +237,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   fragmentsCollected: 0,
   playerScale: 1,
   leafHealth: 0,
+  lastBlockTime: 0,
   rainLevel: 0,
   isRaining: false,
 
@@ -292,22 +297,67 @@ export const useGameStore = create<GameState>((set, get) => ({
       });
   },
 
+  hoverFleshBall: () => {
+      const { currentLevel, narrativeIndex } = get();
+      set({ isInteractiveHover: true });
+      if (currentLevel === 'CHEWING' && narrativeIndex === 0) {
+          set({ narrativeIndex: 1 }); // Switch to empty text to "hide" it
+      }
+  },
+
   growPlayer: (amount) => {
-      const newScale = Math.min(get().playerScale + amount, 10);
-      const isComplete = newScale > 8;
+      const { playerScale, currentLevel, narrativeIndex } = get();
+      const newScale = Math.min(playerScale + amount, 10);
+      let newNarrativeIndex = narrativeIndex;
+      
+      // CHEWING logic
+      let isComplete = false;
+      if (currentLevel === 'CHEWING') {
+          // If we have started growing substantially and text is currently hidden (index 1), show next text
+          if (newScale > 3.0 && narrativeIndex < 2) {
+              newNarrativeIndex = 2; // "越咀嚼..."
+          }
+          isComplete = newScale > 8;
+          if (isComplete) newNarrativeIndex = 3; // "咀嚼，就是..."
+      }
+
+      // WIND Logic
+      if (currentLevel === 'WIND') {
+          if (newScale > 3.0 && narrativeIndex === 0) {
+              newNarrativeIndex = 1; 
+          }
+      }
+      
       set({ 
           playerScale: newScale,
-          isLevelComplete: isComplete,
-          narrativeIndex: isComplete ? 1 : get().narrativeIndex // Update to "咀嚼，就是互相成就彼此的形状。"
+          isLevelComplete: isComplete ? true : get().isLevelComplete,
+          narrativeIndex: newNarrativeIndex
       });
   },
 
+  damageLeaf: (amount) => {
+      if (get().isLevelComplete) return;
+      set({ leafHealth: Math.max(get().leafHealth - amount, 0) });
+  },
+
   healLeaf: (amount) => {
+      if (get().isLevelComplete) return;
       const newHealth = Math.min(get().leafHealth + amount, 100);
-      set({ 
-          leafHealth: newHealth,
-          isLevelComplete: newHealth >= 100 // Win condition for Wind
-      });
+      if (newHealth >= 100 && !get().isLevelComplete) {
+          playLeafSuccess();
+          // Force narrative to the final success line
+          set({ 
+              leafHealth: newHealth,
+              isLevelComplete: true,
+              narrativeIndex: 2 
+          });
+      } else {
+           set({ leafHealth: newHealth });
+      }
+  },
+
+  triggerPlayerBlock: () => {
+      set({ lastBlockTime: Date.now() });
   },
   
   selectVehicle: (type) => {
@@ -369,9 +419,21 @@ export const useGameStore = create<GameState>((set, get) => ({
           let newSeqIndex = nextSequenceIndex;
           if (currentLevel === 'CHAPTER_1') newSeqIndex++;
 
+          // Connection logic
+          let newNarrativeIndex = get().narrativeIndex;
+          if (currentLevel === 'CONNECTION') {
+              if (isComplete) {
+                  newNarrativeIndex = 2; // "形成了一个巨大的网..."
+              } else if (newNarrativeIndex === 0 && newConnections.length > 0) {
+                  newNarrativeIndex = 1; // "连接所有的节点..."
+              }
+          } else {
+              newNarrativeIndex += 1;
+          }
+
           set({ 
               connections: newConnections, nodes: newNodes, draggingNodeId: null,
-              narrativeIndex: get().narrativeIndex + 1, isLevelComplete: isComplete, nextSequenceIndex: newSeqIndex
+              narrativeIndex: newNarrativeIndex, isLevelComplete: isComplete, nextSequenceIndex: newSeqIndex
           });
       } else {
           set({ draggingNodeId: null });
@@ -419,6 +481,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       fragmentsCollected: 0,
       playerScale: 1,
       leafHealth: 0,
+      lastBlockTime: 0,
       rainLevel: 0,
       isRaining: false,
       isInteractiveHover: false

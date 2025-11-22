@@ -8,10 +8,10 @@ const NARRATIVE_SCRIPT: Record<LevelType, string[]> = {
   PROLOGUE: ["这一次,我好像是毛绒绒的一滴物。", "按住左键向后拉，瞄准，松开 (Drag Back & Release).", "向着远处的强光前进 (Head towards the Light)."],
   CHAPTER_1: ["湿季发生了，我和其他液体从这个星球的表面上冒出来。", "按住左键，我是追逐光芒的孩子 (Hold LMB to Lure).", "拖拽丝线，连接那些神经节点 (Drag to Connect)."],
   NAME: ["didi, 你的名字是什么？", "什么是身体性的语言？", "戳破那些泡泡，收集紫色的碎片。"],
-  CHEWING: ["越咀嚼你就会拥有越多的液体。", "咀嚼，就是互相成就彼此的形状。", "挤过去，让自己变大。"],
-  WIND: ["没关系，我在抗拒生命的时候已经感受到了更强的生命力...", "因为液体干枯的时候，会往我的身体里缩，好痛好痛...", "我能感觉自己在慢慢地变小，慢慢地变暗..."],
+  CHEWING: ["挤过去，让自己变大。", "", "越咀嚼你就会拥有越多的液体。", "咀嚼，就是互相成就彼此的形状。"],
+  WIND: ["因为液体干枯的时候，会往我的身体里缩，好痛好痛...", "我能感觉自己在慢慢地变小，慢慢地变暗...", "没关系，我在抗拒生命的时候已经感受到了更强的生命力..."],
   TRAVEL: ["什么是交通工具？", "只要你甘心流下一滴眼泪，你就可以乘着你的眼泪去任何地方。"],
-  CONNECTION: ["我们内在的结构稳固地连在一起...", "形成了一个巨大的网, 一个巨大的骨骼。", "连接所有的节点..."],
+  CONNECTION: ["我们内在的结构稳固地连在一起...", "连接所有的节点...", "形成了一个巨大的网, 一个巨大的骨骼。"],
   HOME: ["滴滴, 这就是我们身体性的语言, 我们的家园。", "原来它掉进了湖泊里, 而湖就是由我们液体的眼泪组成的呀。", "去吧，跳入湖泊，融为一体。"],
   SUN: ["我不害怕。我不在了，湿也永远会在。", "而这不是一场降临，只是无限循环中的一部分呀。", "点击蘑菇，降下甘霖。"]
 };
@@ -53,7 +53,7 @@ export const UI: React.FC = () => {
       <div className="absolute bottom-24 left-0 right-0 mx-auto w-full max-w-3xl px-4 text-center pointer-events-auto">
         <AnimatePresence mode='wait'>
             <motion.div key={`${currentLevel}-${text}`} initial={{ opacity: 0, filter: 'blur(10px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, filter: 'blur(10px)' }} transition={{ duration: 1.5 }}>
-                <p className="text-xl md:text-2xl text-slate-800/80 font-medium leading-relaxed drop-shadow-sm">{text}</p>
+                <p className="text-xl md:text-2xl text-slate-800/80 font-medium leading-relaxed drop-shadow-sm h-16">{text}</p>
                 {isLevelComplete && currentLevel !== 'SUN' && (
                     <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={(e) => { e.stopPropagation(); handleNextLevel(); }} className="mt-8 text-pink-500 border border-pink-300 px-6 py-2 rounded-full hover:bg-pink-50 transition-colors">前往下一章 (Proceed)</motion.button>
                 )}

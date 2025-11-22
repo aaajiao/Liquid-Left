@@ -1,5 +1,5 @@
 
-import React, { useRef, useState, useLayoutEffect } from 'react';
+import React, { useRef, useState, useLayoutEffect, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Line, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
@@ -23,10 +23,12 @@ export const Player: React.FC = () => {
   const bodyGroupRef = useRef<THREE.Group>(null); 
   const coreRef = useRef<THREE.Mesh>(null);
   const shellMaterialRef = useRef<THREE.MeshPhysicalMaterial>(null);
+  const auraRef = useRef<THREE.MeshBasicMaterial>(null);
   
   const { 
       cursorWorldPos, isMouseDown, interactionMode, updatePlayerPos, currentLevel, envFeatures,
-      playerScale, fragmentsCollected, absorbFragment, growPlayer, healLeaf, selectVehicle, rainLevel
+      playerScale, fragmentsCollected, absorbFragment, growPlayer, healLeaf, selectVehicle, rainLevel,
+      lastBlockTime, isLevelComplete
   } = useGameStore();
 
   const theme = PLAYER_THEMES[currentLevel];
@@ -38,17 +40,28 @@ export const Player: React.FC = () => {
   const lastSqueezeSoundTime = useRef(0);
   const lastBounceTime = useRef(0); // Debounce for orb sounds
   const squeezeIntensity = useRef(0); // 0 to 1
+  const blockFlashIntensity = useRef(0); // 0 to 1
+  
+  // Smooth visual scale independent of logic scale (for shrinking animations)
+  const currentRenderScale = useRef(1);
 
   const exitFeature = envFeatures.find(f => f.type === 'EXIT_GATE');
   const exitPos = exitFeature ? new THREE.Vector3(...exitFeature.position) : null;
 
   // Dynamic Color Logic for Name Chapter & Chewing
   const dynamicColor = useRef(new THREE.Color(theme.shell));
+
+  // Watch for block events to trigger visual flash
+  useEffect(() => {
+      if (lastBlockTime > 0) {
+          blockFlashIntensity.current = 1.0;
+      }
+  }, [lastBlockTime]);
   
   useFrame((state, delta) => {
     if (!groupRef.current) return;
     
-    // Color Update Logic
+    // 1. BASE COLOR LOGIC
     if (currentLevel === 'NAME') {
         const progress = Math.min(fragmentsCollected / 5, 1);
         // Shell: White -> Deep Purple
@@ -76,18 +89,113 @@ export const Player: React.FC = () => {
         if (coreRef.current) (coreRef.current.material as THREE.MeshBasicMaterial).color.set(theme.core);
     }
 
-    // APPLY DYNAMIC COLOR TO SHELL MATERIAL
+    // 2. MATERIAL PROPERTIES & TRANSFORMATION LOGIC
     if (shellMaterialRef.current) {
-        shellMaterialRef.current.color.copy(dynamicColor.current);
         
-        // Finale Dissolve Logic
-        if (currentLevel === 'SUN' && rainLevel > 0) {
-             const dissolve = Math.min(rainLevel / 10, 1);
+        let targetOpacity = 1;
+        let targetTransmission = 0.2;
+        let targetRoughness = 0.3;
+        let coreScale = 1;
+        let auraOpacity = 0.5;
+
+        // -- WIND LEVEL TRANSFORMATION --
+        if (currentLevel === 'WIND') {
+            
+            if (isLevelComplete) {
+                // WIN STATE: Shrink and become Leaf-like
+                
+                // Color: Transition to Leaf Green
+                dynamicColor.current.lerp(new THREE.Color("#32cd32"), delta * 2);
+                shellMaterialRef.current.color.copy(dynamicColor.current);
+
+                // Transmission: Become Solid (0)
+                targetTransmission = THREE.MathUtils.lerp(shellMaterialRef.current.transmission, 0.0, delta * 2);
+
+                // Roughness: Become Organic (0.4)
+                targetRoughness = THREE.MathUtils.lerp(shellMaterialRef.current.roughness, 0.4, delta * 2);
+
+                // Emissive: Green Glow
+                shellMaterialRef.current.emissive.lerp(new THREE.Color("#00ff00"), delta * 2);
+                shellMaterialRef.current.emissiveIntensity = 0.5;
+
+                // Core: Remains hidden or very small
+                coreScale = 0;
+                
+                // Aura: Fade out
+                auraOpacity = THREE.MathUtils.lerp(auraRef.current?.opacity || 0, 0, delta);
+
+            } else {
+                // GAMEPLAY STATE: Turn into clear water drop based on size
+                const waterProgress = Math.min(Math.max((playerScale - 1) / 5, 0), 1); 
+                
+                // Transmission: 0.2 -> 1.0 (Fully clear water)
+                targetTransmission = THREE.MathUtils.lerp(0.2, 0.98, waterProgress);
+                
+                // Roughness: 0.3 -> 0.0 (Perfectly smooth)
+                targetRoughness = THREE.MathUtils.lerp(0.3, 0.0, waterProgress);
+
+                // Color: Fade to white/clear
+                dynamicColor.current.lerp(new THREE.Color("#ffffff"), waterProgress);
+                shellMaterialRef.current.color.copy(dynamicColor.current);
+
+                // Core: Shrink to 0 so we can see through the body
+                coreScale = 1 - waterProgress;
+                
+                // Emissive: Reduce glow as it becomes water/transparent
+                // Note: We use lerp here to avoid conflict with Block Flash
+                if (blockFlashIntensity.current <= 0) {
+                     shellMaterialRef.current.emissive.lerpColors(new THREE.Color(theme.emissive), new THREE.Color("#000000"), waterProgress);
+                }
+
+                // Dynamic Thickness for refraction
+                shellMaterialRef.current.thickness = 1.2 * playerScale;
+                
+                // Aura: Fade out as it becomes water
+                auraOpacity = 0.5 * (1 - waterProgress);
+            }
+
+        } 
+        // -- SUN LEVEL DISSOLVE --
+        else if (currentLevel === 'SUN' && rainLevel > 0) {
+            targetOpacity = Math.max(0, 1 - (rainLevel / 10));
+            auraOpacity = 0.5 * targetOpacity;
+            shellMaterialRef.current.color.copy(dynamicColor.current); // standard update
+        } else {
+            // Standard update for other levels
+            shellMaterialRef.current.color.copy(dynamicColor.current);
+        }
+
+        // Apply Core Scale
+        if (coreRef.current) {
+            // Breathing effect mixed with structural scaling
+            const breathe = 0.5 * (1 + Math.sin(state.clock.elapsedTime * 8) * 0.1);
+            coreRef.current.scale.setScalar(breathe * coreScale);
+        }
+
+        // Apply Flash White on Block (Wind Level Only)
+        if (blockFlashIntensity.current > 0 && currentLevel === 'WIND') {
+            shellMaterialRef.current.emissive.setHex(0xffffff);
+            shellMaterialRef.current.emissiveIntensity = 1.0 + blockFlashIntensity.current * 2;
+            blockFlashIntensity.current = Math.max(0, blockFlashIntensity.current - delta * 5); // Decay
+        } else if (currentLevel !== 'WIND') {
+            // Only reset theme emissive if NOT in WIND (because WIND handles its own emissive fade/green logic)
+            shellMaterialRef.current.emissive.set(theme.emissive);
+            shellMaterialRef.current.emissiveIntensity = 0.4;
+        }
+
+        // Apply Physics Material Props
+        shellMaterialRef.current.transmission = targetTransmission;
+        shellMaterialRef.current.roughness = targetRoughness;
+
+        // Apply Opacity (Alpha Fade) logic
+        // If transmission is high (water), we usually want transparent=false to avoid depth issues, 
+        // unless we are actually fading out the object (Sun level).
+        if (targetOpacity < 0.99) {
              shellMaterialRef.current.transparent = true;
-             shellMaterialRef.current.opacity = 1 - dissolve;
+             shellMaterialRef.current.opacity = targetOpacity;
              if (coreRef.current) {
                  (coreRef.current.material as THREE.MeshBasicMaterial).transparent = true;
-                 (coreRef.current.material as THREE.MeshBasicMaterial).opacity = 1 - dissolve;
+                 (coreRef.current.material as THREE.MeshBasicMaterial).opacity = targetOpacity;
              }
         } else {
              shellMaterialRef.current.transparent = false;
@@ -96,6 +204,11 @@ export const Player: React.FC = () => {
                  (coreRef.current.material as THREE.MeshBasicMaterial).transparent = false;
                  (coreRef.current.material as THREE.MeshBasicMaterial).opacity = 1;
              }
+        }
+
+        // Apply Aura
+        if (auraRef.current) {
+            auraRef.current.opacity = auraOpacity;
         }
     }
 
@@ -218,25 +331,6 @@ export const Player: React.FC = () => {
         }
     }
 
-    // WIND: Shielding
-    if (currentLevel === 'WIND') {
-        const wind = envFeatures.find(f => f.type === 'WIND_EMITTER');
-        const leaf = envFeatures.find(f => f.type === 'WITHERED_LEAF');
-        if (wind && leaf) {
-             const windPos = new THREE.Vector3(...wind.position);
-             const leafPos = new THREE.Vector3(...leaf.position);
-             const toLeaf = new THREE.Vector3().subVectors(leafPos, windPos);
-             const toPlayer = new THREE.Vector3().subVectors(pos, windPos);
-             // Simple check: Project player onto wind-leaf line
-             const projection = toPlayer.projectOnVector(toLeaf);
-             const distToLine = new THREE.Vector3().subVectors(toPlayer, projection).length();
-             
-             if (distToLine < 1.5 && projection.length() < toLeaf.length()) {
-                 healLeaf(delta * 20);
-             }
-        }
-    }
-
     // TRAVEL: Choice
     if (currentLevel === 'TRAVEL') {
         const now = state.clock.elapsedTime;
@@ -289,14 +383,24 @@ export const Player: React.FC = () => {
     if (speed > 0.1) groupRef.current.rotation.y = Math.atan2(vel.x, vel.z);
     
     // Scale logic
-    let baseScale = 1;
-    if (currentLevel === 'CHEWING') baseScale = playerScale;
+    let targetScale = 1;
+    if (currentLevel === 'CHEWING') {
+        targetScale = playerScale;
+    } else if (currentLevel === 'WIND') {
+        // If won, shrink to 1. If active, use playerScale.
+        targetScale = isLevelComplete ? 1 : playerScale;
+    }
+
+    // Smooth lerp for visual scale
+    currentRenderScale.current = THREE.MathUtils.lerp(currentRenderScale.current, targetScale, delta * 2);
+    const finalScale = currentRenderScale.current;
 
     const stretch = 1 + Math.min(speed * 0.2, 0.8);
     const squash = 1 / Math.sqrt(stretch);
-    if (bodyGroupRef.current) bodyGroupRef.current.scale.set(squash * baseScale, stretch * baseScale, squash * baseScale);
-
-    if (coreRef.current) coreRef.current.scale.setScalar(0.5 * (1 + Math.sin(state.clock.elapsedTime * 8) * 0.1));
+    
+    if (bodyGroupRef.current) {
+        bodyGroupRef.current.scale.set(squash * finalScale, stretch * finalScale, squash * finalScale);
+    }
 
   });
 
@@ -305,6 +409,8 @@ export const Player: React.FC = () => {
       position.current.copy(useGameStore.getState().playerPos);
       dragStartPos.current = null;
       setSlingshotVector(null);
+      // Reset visual scale for new level
+      currentRenderScale.current = 1; 
   }, [currentLevel]);
 
   return (
@@ -313,7 +419,7 @@ export const Player: React.FC = () => {
           {/* Aura */}
           <mesh>
             <sphereGeometry args={[0.48, 32, 32]} />
-            <meshBasicMaterial color={theme.aura} transparent opacity={0.5} side={THREE.BackSide} depthWrite={false} />
+            <meshBasicMaterial ref={auraRef} color={theme.aura} transparent opacity={0.5} side={THREE.BackSide} depthWrite={false} />
           </mesh>
           {/* Shell */}
           <mesh>
@@ -326,7 +432,8 @@ export const Player: React.FC = () => {
                 roughness={0.3} 
                 metalness={0.1} 
                 transmission={0.2} 
-                thickness={1.2} 
+                thickness={1.2}
+                ior={1.33} // Index of Refraction for Water
             />
           </mesh>
           {/* Core */}

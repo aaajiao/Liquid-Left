@@ -366,3 +366,85 @@ export const playOrbFusion = () => {
     osc.start(t);
     osc.stop(t + 3);
 };
+
+export const playWindBlock = () => {
+    const ctx = getCtx();
+    const t = ctx.currentTime;
+    
+    // LIQUID IMPACT (Hit Didi)
+    // Low, dull thud - Triangle wave
+    const pitchVar = Math.random() * 50 - 25; 
+    
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(100 + pitchVar, t);
+    osc.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+    
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 400;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.5, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.start(t);
+    osc.stop(t + 0.15);
+};
+
+export const playWindDamage = () => {
+    const ctx = getCtx();
+    const t = ctx.currentTime;
+    
+    // DRY/CRISP IMPACT (Hit Leaf)
+    // High pitched crackle/snap - Noise + Highpass
+    
+    const bufferSize = ctx.sampleRate * 0.1;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for(let i=0; i<bufferSize; i++) data[i] = (Math.random()*2-1);
+    
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 2000; // Only high freqs
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.4, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.08);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start(t);
+};
+
+export const playLeafSuccess = () => {
+    const ctx = getCtx();
+    const t = ctx.currentTime;
+    
+    // Magical chime run
+    const notes = [523.25, 659.25, 783.99, 1046.50]; // C Major
+    
+    notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0, t + i*0.1);
+        gain.gain.linearRampToValueAtTime(0.2, t + i*0.1 + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + i*0.1 + 1.0);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t + i*0.1);
+        osc.stop(t + i*0.1 + 1.0);
+    });
+};

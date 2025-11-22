@@ -1,10 +1,10 @@
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { MeshDistortMaterial, Sparkles, Cloud, Stars, Text, Float, Billboard } from '@react-three/drei';
+import { MeshDistortMaterial, Sparkles, Cloud, Stars, Text, Float, Billboard, Instance, Instances } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore, EnvFeature } from '../store';
-import { playBubbleHover, playMushroomHover, playSunHover } from '../utils/audio';
+import { playBubbleHover, playMushroomHover, playSunHover, playWindBlock, playWindDamage } from '../utils/audio';
 
 const PhysicsPlane: React.FC = () => {
     const { setCursorWorldPos, setMouseDown, cancelDrag, interactionMode } = useGameStore();
@@ -33,6 +33,8 @@ export const World: React.FC = () => {
        {envFeatures.map((feature) => (
            <OrganicFeature key={feature.id} feature={feature} />
        ))}
+
+       {currentLevel === 'WIND' && <WindDanmakuSystem />}
 
        <Atmosphere level={currentLevel} />
     </group>
@@ -80,6 +82,126 @@ const LakeBed: React.FC = () => (
          <meshStandardMaterial color="#000" emissive="#050510" roughness={0.1} />
     </mesh>
 )
+
+// --- WIND SYSTEM (Danmaku) ---
+const WindDanmakuSystem: React.FC = () => {
+    const instanceRef = useRef<THREE.InstancedMesh>(null);
+    const { playerPos, leafHealth, healLeaf, damageLeaf, triggerPlayerBlock, growPlayer, playerScale, isLevelComplete } = useGameStore();
+    
+    // Configuration
+    const count = 100; // Number of active wind particles allowed
+    const tempObject = useMemo(() => new THREE.Object3D(), []);
+    const STRIDE = 7;
+    
+    // State for bullets: [x, y, z, speed, sineOffset, active(1/0), sizeVar]
+    const bullets = useRef(new Float32Array(count * STRIDE)); 
+    const leafPos = new THREE.Vector3(0, 0.1, 8);
+    const emitterZ = -15;
+    
+    // Initialize bullets off-screen
+    useEffect(() => {
+        for (let i = 0; i < count; i++) {
+            bullets.current[i * STRIDE + 2] = 100; // Move out of view
+            bullets.current[i * STRIDE + 5] = 0; // Inactive
+        }
+    }, []);
+
+    useFrame((state, delta) => {
+        if (!instanceRef.current) return;
+
+        // 1. Spawn new bullets periodically (STOP spawning if level complete)
+        if (!isLevelComplete && Math.random() < 0.1) { // Spawn chance
+            for (let i = 0; i < count; i++) {
+                if (bullets.current[i * STRIDE + 5] === 0) { // Find inactive
+                    bullets.current[i * STRIDE + 0] = (Math.random() - 0.5) * 12; // Spread X
+                    bullets.current[i * STRIDE + 1] = 0.5 + Math.random() * 0.5; // Height Y
+                    bullets.current[i * STRIDE + 2] = emitterZ; // Start Z
+                    bullets.current[i * STRIDE + 3] = 4 + Math.random() * 4; // Speed
+                    bullets.current[i * STRIDE + 4] = Math.random() * Math.PI * 2; // Sine Offset
+                    bullets.current[i * STRIDE + 5] = 1; // Active
+                    bullets.current[i * STRIDE + 6] = 0.7 + Math.random() * 0.8; // Random Size Variation (0.7 to 1.5)
+                    break;
+                }
+            }
+        }
+
+        // 2. Update bullets
+        const playerV = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z);
+        // Radius grows as player grows to make blocking easier/more satisfying
+        const hitRadius = 1.2 * (1 + (playerScale - 1) * 0.3); 
+
+        for (let i = 0; i < count; i++) {
+            const idx = i * STRIDE;
+            if (bullets.current[idx + 5] === 1) {
+                
+                // Move Forward
+                bullets.current[idx + 2] += bullets.current[idx + 3] * delta;
+                // Sine Wave Motion
+                const wave = Math.sin(state.clock.elapsedTime * 2 + bullets.current[idx + 4]) * 0.05;
+                bullets.current[idx + 0] += wave;
+
+                const bx = bullets.current[idx + 0];
+                const by = bullets.current[idx + 1];
+                const bz = bullets.current[idx + 2];
+                const sizeVar = bullets.current[idx + 6];
+
+                // Only check collisions if game is active
+                if (!isLevelComplete) {
+                    // Collision: Player (Block)
+                    const distPlayer = Math.sqrt(Math.pow(bx - playerV.x, 2) + Math.pow(bz - playerV.z, 2));
+                    if (distPlayer < hitRadius) {
+                        bullets.current[idx + 5] = 0; // Destroy
+                        triggerPlayerBlock(); // Visual flash
+                        playWindBlock(); // Sound (Thud/Liquid)
+                        growPlayer(0.1); // Grow player slightly
+                        continue;
+                    }
+
+                    // Collision: Leaf (Damage)
+                    const distLeaf = Math.sqrt(Math.pow(bx - leafPos.x, 2) + Math.pow(bz - leafPos.z, 2));
+                    if (distLeaf < 1.5) {
+                        bullets.current[idx + 5] = 0; // Destroy
+                        damageLeaf(5);
+                        playWindDamage(); // Sound (Crisp/Crack)
+                        continue;
+                    }
+                }
+
+                // Out of bounds
+                if (bz > 15) {
+                    bullets.current[idx + 5] = 0;
+                }
+
+                // Render
+                tempObject.position.set(bx, by, bz);
+                // Rotate to face movement roughly
+                tempObject.rotation.set(0, 0, wave * 2);
+                const scale = 0.3;
+                // Apply random size variation, with slight stretch effect based on size
+                tempObject.scale.set(scale * sizeVar, scale * sizeVar, scale * 3 * sizeVar); 
+                tempObject.updateMatrix();
+                instanceRef.current.setMatrixAt(i, tempObject.matrix);
+            } else {
+                // Hide inactive
+                instanceRef.current.setMatrixAt(i, new THREE.Matrix4().makeScale(0,0,0));
+            }
+        }
+        instanceRef.current.instanceMatrix.needsUpdate = true;
+
+        // Passive Healing logic (only if not being bombarded too hard)
+        if (leafHealth < 100) {
+            healLeaf(delta * 3); 
+        }
+    });
+
+    return (
+        <instancedMesh ref={instanceRef} args={[undefined as any, undefined as any, count]}>
+            <sphereGeometry args={[1, 8, 8]} />
+            <meshBasicMaterial color="#e0ffff" transparent opacity={0.6} blending={THREE.AdditiveBlending} />
+        </instancedMesh>
+    );
+}
+
 
 const BubbleFeature: React.FC<{ feature: EnvFeature }> = ({ feature }) => {
     const { popBubble, setInteractiveHover } = useGameStore();
@@ -220,7 +342,7 @@ const SunFeature: React.FC<{ feature: EnvFeature, rainLevel?: number }> = ({ fea
             {/* Core Sun */}
             <mesh>
                 <sphereGeometry args={[1, 64, 64]} />
-                <meshBasicMaterial color="#ff4500" transparent opacity={opacity} />
+                <meshBasicMaterial color="#ff4500" transparent opacity={0.3} />
             </mesh>
             {/* Boiling Plasma Surface */}
             <mesh scale={1.05}>
@@ -291,7 +413,7 @@ const EmotionOrbFeature: React.FC<{ feature: EnvFeature }> = ({ feature }) => {
 }
 
 const OrganicFeature: React.FC<{ feature: EnvFeature }> = ({ feature }) => {
-    const { rainLevel } = useGameStore();
+    const { rainLevel, hoverFleshBall, setInteractiveHover } = useGameStore();
 
     // --- Prologue ---
     if (feature.type === 'FLESH_TUNNEL') {
@@ -341,7 +463,12 @@ const OrganicFeature: React.FC<{ feature: EnvFeature }> = ({ feature }) => {
     // --- Chewing ---
     if (feature.type === 'FLESH_BALL') {
         return (
-            <mesh position={feature.position} scale={feature.scale}>
+            <mesh 
+                position={feature.position} 
+                scale={feature.scale}
+                onPointerOver={(e) => { e.stopPropagation(); hoverFleshBall(); }}
+                onPointerOut={(e) => { e.stopPropagation(); setInteractiveHover(false); }}
+            >
                 <sphereGeometry args={[1, 32, 32]} />
                 <MeshDistortMaterial color={feature.color} distort={0.4} speed={1.5} roughness={0.6} />
             </mesh>
@@ -350,16 +477,65 @@ const OrganicFeature: React.FC<{ feature: EnvFeature }> = ({ feature }) => {
 
     // --- Wind ---
     if (feature.type === 'WIND_EMITTER') {
-        return <Sparkles position={feature.position} count={100} scale={[5, 5, 20]} size={5} speed={5} color="#fff" opacity={0.3} />
+         // Emitter is just a visual source now, bullets are handled in WindDanmakuSystem
+         return (
+             <group position={feature.position}>
+                 <Sparkles count={20} scale={[5, 5, 1]} size={4} speed={1} color="#e0ffff" opacity={0.5} />
+             </group>
+         )
     }
     if (feature.type === 'WITHERED_LEAF') {
         const { leafHealth } = useGameStore();
-        const color = new THREE.Color('#8b4513').lerp(new THREE.Color('#00ff00'), leafHealth / 100);
+        const ratio = leafHealth / 100;
+        // Color: Brown -> Green
+        const color = new THREE.Color('#8b4513').lerp(new THREE.Color('#32cd32'), ratio);
+        // Unfurl: Scale x axis from 0.2 (curled/folded) to 1 (flat)
+        const unfurl = 0.2 + ratio * 0.8;
+        
+        // Define iconic leaf shape (Teardrop/Oval)
+        const leafShape = useMemo(() => {
+            const s = new THREE.Shape();
+            s.moveTo(0, -1);
+            // Curve out and up to a tip
+            s.bezierCurveTo(0.7, -0.6, 0.9, 0.4, 0, 1.2); // Right Side
+            s.bezierCurveTo(-0.9, 0.4, -0.7, -0.6, 0, -1); // Left Side
+            return s;
+        }, []);
+
         return (
-            <mesh position={feature.position} scale={feature.scale} rotation={[-Math.PI/4, 0, 0]}>
-                <planeGeometry args={[1, 1]} />
-                <meshStandardMaterial color={color} side={THREE.DoubleSide} />
-            </mesh>
+            <group position={feature.position} scale={feature.scale} rotation={[-Math.PI/3, 0, 0]}>
+                <group scale={[unfurl, 1, 1]}> 
+                    {/* Main Leaf Blade */}
+                    <mesh receiveShadow castShadow>
+                        <shapeGeometry args={[leafShape]} />
+                        <meshStandardMaterial color={color} side={THREE.DoubleSide} roughness={0.6} metalness={0.1} />
+                    </mesh>
+                    
+                    {/* Central Vein (Stem) */}
+                    <mesh position={[0, 0, 0.02]}>
+                        <boxGeometry args={[0.06, 2.2, 0.05]} />
+                        <meshStandardMaterial color={ratio > 0.5 ? "#228b22" : "#5d4037"} />
+                    </mesh>
+
+                    {/* Left Side Vein */}
+                    <mesh position={[-0.25, 0.1, 0.02]} rotation={[0, 0, Math.PI / 4]}>
+                        <boxGeometry args={[0.04, 0.7, 0.04]} />
+                        <meshStandardMaterial color={ratio > 0.5 ? "#228b22" : "#5d4037"} />
+                    </mesh>
+
+                    {/* Right Side Vein */}
+                    <mesh position={[0.25, 0.3, 0.02]} rotation={[0, 0, -Math.PI / 3.5]}>
+                        <boxGeometry args={[0.04, 0.6, 0.04]} />
+                        <meshStandardMaterial color={ratio > 0.5 ? "#228b22" : "#5d4037"} />
+                    </mesh>
+                </group>
+
+                {/* Healing Glow */}
+                {ratio > 0 && (
+                    <pointLight color="#32cd32" intensity={3 * ratio} distance={5} decay={2} position={[0, 0, 1]} />
+                )}
+                <Sparkles count={10 + Math.floor(ratio * 30)} scale={3} color={ratio > 0.5 ? "#00ff00" : "#d2691e"} size={ratio > 0.5 ? 6 : 3} speed={0.5 + ratio} opacity={0.6} />
+            </group>
         )
     }
 
