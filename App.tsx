@@ -16,7 +16,7 @@ const LEVEL_THEMES: Record<LevelType, { bg: string, fog: string }> = {
   CHEWING: { bg: '#f0fff0', fog: '#98fb98' },
   WIND: { bg: '#ffe4e1', fog: '#fa8072' },
   TRAVEL: { bg: '#000020', fog: '#191970' },
-  CONNECTION: { bg: '#e6e6fa', fog: '#d8bfd8' }, 
+  CONNECTION: { bg: '#fcfbf9', fog: '#dbe7f0' }, // Bone White bg with Sketch Blue fog
   HOME: { bg: '#000005', fog: '#000010' },
   SUN: { bg: '#2a0a0a', fog: '#8b0000' }
 };

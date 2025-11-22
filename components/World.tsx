@@ -49,7 +49,7 @@ const BreathingGround: React.FC<{ level: string, rainLevel?: number }> = ({ leve
     if (level === 'CHEWING') color = "#90ee90"; 
     if (level === 'WIND') color = "#ffe4e1"; 
     if (level === 'TRAVEL') color = "#000020"; 
-    if (level === 'CONNECTION') color = "#e6e6fa";
+    if (level === 'CONNECTION') color = "#fcfbf9"; // Bone White
     if (level === 'SUN') color = "#2a0a0a"; 
 
     // Dynamic Water Transformation for Sun Finale
