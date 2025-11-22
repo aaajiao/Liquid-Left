@@ -24,12 +24,18 @@ const LEVEL_THEMES: Record<LevelType, { bg: string, fog: string }> = {
 const CustomCursor: React.FC = () => {
   const [pos, setPos] = useState({ x: -100, y: -100 });
   const { isMouseDown, hoveredNodeId, isInteractiveHover } = useGameStore();
+  
+  // Mobile check: hide cursor on touch devices
+  const isTouch = typeof window !== 'undefined' && window.matchMedia("(pointer: coarse)").matches;
 
   useEffect(() => {
+    if (isTouch) return;
     const onMouseMove = (e: MouseEvent) => setPos({ x: e.clientX, y: e.clientY });
     window.addEventListener('mousemove', onMouseMove);
     return () => window.removeEventListener('mousemove', onMouseMove);
-  }, []);
+  }, [isTouch]);
+
+  if (isTouch) return null;
 
   return (
     <div className="fixed top-0 left-0 pointer-events-none z-[100]" style={{ transform: `translate3d(${pos.x}px, ${pos.y}px, 0)` }}>
@@ -100,7 +106,17 @@ const CameraController = () => {
         }
     });
 
-    return <OrbitControls ref={controlsRef} enableDamping minDistance={10} maxDistance={100} maxPolarAngle={Math.PI / 2 - 0.1} mouseButtons={{ LEFT: undefined as any, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }} />;
+    return (
+        <OrbitControls 
+            ref={controlsRef} 
+            enableDamping 
+            minDistance={10} 
+            maxDistance={100} 
+            maxPolarAngle={Math.PI / 2 - 0.1} 
+            mouseButtons={{ LEFT: undefined as any, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }} 
+            touches={{ ONE: undefined as any, TWO: THREE.TOUCH.DOLLY_ROTATE }}
+        />
+    );
 }
 
 const App: React.FC = () => {

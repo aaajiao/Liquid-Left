@@ -11,9 +11,9 @@ const PhysicsPlane: React.FC = () => {
     return (
         <mesh 
             rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} visible={true} 
-            onPointerMove={(e) => setCursorWorldPos(e.point)}
-            onPointerDown={(e) => { if (e.button === 0) setMouseDown(true); }}
-            onPointerUp={() => { setMouseDown(false); cancelDrag(); }}
+            onPointerMove={(e) => { if (e.isPrimary) setCursorWorldPos(e.point); }}
+            onPointerDown={(e) => { if (e.isPrimary && e.button === 0) setMouseDown(true); }}
+            onPointerUp={(e) => { if (e.isPrimary) { setMouseDown(false); cancelDrag(); } }}
         >
             <planeGeometry args={[200, 200]} />
             <meshBasicMaterial color="red" transparent opacity={0} />
