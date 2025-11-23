@@ -43,4 +43,4 @@ This project is built with modern web technologies focusing on performance and p
 
 ---
 
-*Navigating the breathing, organic world of Liquid Left.*
+*Navigating the breathing, organic world of Liquid Left.* 
