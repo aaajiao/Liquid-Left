@@ -105,9 +105,9 @@ const CameraController = () => {
 
     useFrame(() => {
         if (controlsRef.current) {
-            // Mobile Optimization: Slower, heavier lerp (0.03) to prevent motion sickness/jitter
+            // Mobile Optimization: Very slow, cinematic lerp (0.01) to prevent motion sickness/jitter
             // Desktop: Faster, snappy lerp (0.1)
-            const smoothFactor = isTouch ? 0.03 : 0.1;
+            const smoothFactor = isTouch ? 0.01 : 0.1;
             controlsRef.current.target.lerp(playerPos, smoothFactor);
             controlsRef.current.update();
         }
