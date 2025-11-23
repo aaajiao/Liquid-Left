@@ -1,4 +1,3 @@
-
 import React, { Suspense, useRef, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrthographicCamera, Environment, BakeShadows, OrbitControls } from '@react-three/drei';
@@ -79,9 +78,46 @@ const CameraController = () => {
     const playerPos = useGameStore((state) => state.playerPos);
     const currentLevel = useGameStore((state) => state.currentLevel);
     const controlsRef = useRef<any>(null);
+    const [isAltPressed, setIsAltPressed] = useState(false);
     
     // Detect mobile for specific tuning
     const isTouch = typeof window !== 'undefined' && window.matchMedia("(pointer: coarse)").matches;
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Alt') setIsAltPressed(true);
+            
+            // Keyboard Zoom: +/= and -/_
+            if (e.key === '=' || e.key === '+') {
+                if (controlsRef.current) {
+                    // Unlimited zoom in/out for HOME level
+                    const maxZ = currentLevel === 'HOME' ? Infinity : 200;
+                    const newZoom = Math.min(camera.zoom * 1.1, maxZ);
+                    (camera as THREE.OrthographicCamera).zoom = newZoom;
+                    camera.updateProjectionMatrix();
+                }
+            }
+            if (e.key === '-' || e.key === '_') {
+                if (controlsRef.current) {
+                    // Unlimited zoom in/out for HOME level
+                    const minZ = currentLevel === 'HOME' ? 0 : 10;
+                    const newZoom = Math.max(camera.zoom * 0.9, minZ);
+                    (camera as THREE.OrthographicCamera).zoom = newZoom;
+                    camera.updateProjectionMatrix();
+                }
+            }
+        };
+        const handleKeyUp = (e: KeyboardEvent) => {
+            if (e.key === 'Alt') setIsAltPressed(false);
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+        };
+    }, [camera, currentLevel]);
 
     useEffect(() => {
         if (!controlsRef.current) return;
@@ -118,13 +154,20 @@ const CameraController = () => {
             ref={controlsRef} 
             enableDamping 
             dampingFactor={0.05}
-            minDistance={10} 
-            maxDistance={100} 
+            // Fix: Use minZoom/maxZoom for OrthographicCamera instead of minDistance/maxDistance
+            // Completely unrestricted zoom for HOME level, restricted for others
+            minZoom={currentLevel === 'HOME' ? 0 : 10} 
+            maxZoom={currentLevel === 'HOME' ? Infinity : 200} 
             maxPolarAngle={Math.PI / 2 - 0.1} 
             rotateSpeed={isTouch ? 0.4 : 1.0} // Reduce rotation speed on mobile
             zoomSpeed={isTouch ? 0.5 : 1.0}
             enablePan={false} // Disable pan to prevent conflict with drag-to-move
-            mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }} 
+            mouseButtons={{ 
+                // Feature: If Alt is pressed, Left Click becomes Zoom (Dolly)
+                LEFT: isAltPressed ? THREE.MOUSE.DOLLY : THREE.MOUSE.PAN, 
+                MIDDLE: THREE.MOUSE.DOLLY, 
+                RIGHT: THREE.MOUSE.ROTATE 
+            }} 
             // On Mobile: Touch One is mapped to PAN but Pan is disabled -> No Camera Action -> Game Logic
             // Touch Two is Rotate/Zoom
             touches={{ ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }}
@@ -138,6 +181,9 @@ const App: React.FC = () => {
     // Test Mode: Keyboard Shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            // Prevent interference with the new Zoom shortcut
+            if (['=', '-', '+', '_'].includes(e.key)) return;
+
             switch(e.key) {
                 case '1': startLevel('PROLOGUE'); break;
                 case '2': startLevel('CHAPTER_1'); break;
