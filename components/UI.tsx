@@ -48,9 +48,20 @@ export const UI: React.FC = () => {
 
   return (
     <>
-    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-8 z-10 font-serif select-none" onClick={() => resumeAudio()}>
+    <div 
+      className="absolute inset-0 pointer-events-none flex flex-col justify-between p-8 z-10 font-serif select-none" 
+      onClick={() => resumeAudio()}
+      style={{
+        paddingTop: 'calc(2rem + env(safe-area-inset-top))',
+        paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))',
+        paddingLeft: 'calc(2rem + env(safe-area-inset-left))',
+        paddingRight: 'calc(2rem + env(safe-area-inset-right))',
+      }}
+    >
       <div className="text-gray-600/60"><h1 className="text-2xl font-bold tracking-widest uppercase text-pink-900/50">{CHAPTER_TITLES[currentLevel]}</h1></div>
-      <div className="absolute bottom-24 left-0 right-0 mx-auto w-full max-w-3xl px-4 text-center pointer-events-auto">
+      
+      {/* Refactored: Removed absolute positioning for text container to respect parent flex and padding */}
+      <div className="w-full max-w-3xl px-4 text-center pointer-events-auto mx-auto mb-16">
         <AnimatePresence mode='wait'>
             <motion.div key={`${currentLevel}-${text}`} initial={{ opacity: 0, filter: 'blur(10px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, filter: 'blur(10px)' }} transition={{ duration: 1.5 }}>
                 <p className="text-xl md:text-2xl text-slate-800/80 font-medium leading-relaxed drop-shadow-sm h-16">{text}</p>
