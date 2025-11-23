@@ -114,7 +114,7 @@ const CameraController = () => {
             maxDistance={100} 
             maxPolarAngle={Math.PI / 2 - 0.1} 
             mouseButtons={{ LEFT: undefined as any, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }} 
-            touches={{ ONE: undefined as any, TWO: THREE.TOUCH.DOLLY_ROTATE }}
+            touches={{ ONE: null as any, TWO: THREE.TOUCH.DOLLY_ROTATE }}
         />
     );
 }
