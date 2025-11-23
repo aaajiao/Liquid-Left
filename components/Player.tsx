@@ -45,6 +45,9 @@ export const Player: React.FC = () => {
   // Smooth visual scale independent of logic scale (for shrinking animations)
   const currentRenderScale = useRef(1);
 
+  // Mobile detection for physics tuning
+  const isTouch = typeof window !== 'undefined' && window.matchMedia("(pointer: coarse)").matches;
+
   const exitFeature = envFeatures.find(f => f.type === 'EXIT_GATE');
   const exitPos = exitFeature ? new THREE.Vector3(...exitFeature.position) : null;
 
@@ -233,9 +236,22 @@ export const Player: React.FC = () => {
         if (isMouseDown) {
             const forceDir = new THREE.Vector3().subVectors(cursorWorldPos, pos);
             forceDir.y = 0; 
-            if (forceDir.length() > 0.5) {
-                forceDir.normalize();
-                vel.add(forceDir.multiplyScalar(20.0 * delta));
+            
+            // ANALOG MOVEMENT LOGIC
+            const dist = forceDir.length();
+            const deadZone = 0.1;
+
+            if (dist > deadZone) {
+                // On mobile: Analog ramp-up to avoid "jerkiness"
+                // strength goes from 0 to 1 as distance goes from 0.1 to 3.0
+                const maxDist = 3.0;
+                const strength = Math.min(dist, maxDist) / maxDist;
+                
+                // Lower max force for mobile to feel heavier/controllable
+                const maxForce = isTouch ? 10.0 : 20.0;
+                
+                forceDir.normalize().multiplyScalar(strength * maxForce * delta);
+                vel.add(forceDir);
             }
         }
         vel.multiplyScalar(0.92);
