@@ -79,6 +79,9 @@ const CameraController = () => {
     const playerPos = useGameStore((state) => state.playerPos);
     const currentLevel = useGameStore((state) => state.currentLevel);
     const controlsRef = useRef<any>(null);
+    
+    // Detect mobile for specific tuning
+    const isTouch = typeof window !== 'undefined' && window.matchMedia("(pointer: coarse)").matches;
 
     useEffect(() => {
         if (!controlsRef.current) return;
@@ -91,6 +94,7 @@ const CameraController = () => {
         else if (currentLevel === 'HOME') { offset.set(0, 30, 30); zoom = 30; }
         else if (currentLevel === 'SUN') { offset.set(20, 10, 20); zoom = 35; }
 
+        // Initial setup - instant jump
         camera.position.copy(playerPos).add(offset);
         camera.lookAt(playerPos);
         camera.zoom = zoom;
@@ -101,7 +105,10 @@ const CameraController = () => {
 
     useFrame(() => {
         if (controlsRef.current) {
-            controlsRef.current.target.lerp(playerPos, 0.1);
+            // Mobile Optimization: Slower, heavier lerp (0.03) to prevent motion sickness/jitter
+            // Desktop: Faster, snappy lerp (0.1)
+            const smoothFactor = isTouch ? 0.03 : 0.1;
+            controlsRef.current.target.lerp(playerPos, smoothFactor);
             controlsRef.current.update();
         }
     });
@@ -110,11 +117,17 @@ const CameraController = () => {
         <OrbitControls 
             ref={controlsRef} 
             enableDamping 
+            dampingFactor={0.05}
             minDistance={10} 
             maxDistance={100} 
             maxPolarAngle={Math.PI / 2 - 0.1} 
-            mouseButtons={{ LEFT: undefined as any, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }} 
-            touches={{ ONE: null as any, TWO: THREE.TOUCH.DOLLY_ROTATE }}
+            rotateSpeed={isTouch ? 0.4 : 1.0} // Reduce rotation speed on mobile
+            zoomSpeed={isTouch ? 0.5 : 1.0}
+            enablePan={false} // Disable pan to prevent conflict with drag-to-move
+            mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }} 
+            // On Mobile: Touch One is mapped to PAN but Pan is disabled -> No Camera Action -> Game Logic
+            // Touch Two is Rotate/Zoom
+            touches={{ ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }}
         />
     );
 }
