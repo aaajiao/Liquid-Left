@@ -290,7 +290,7 @@ export const Player: React.FC = () => {
          
          // Check for completion
          if (pos.z < -12 && !useGameStore.getState().isLevelComplete) {
-             useGameStore.setState({ isLevelComplete: true });
+             useGameStore.setState({ isLevelComplete: true, narrativeIndex: 1 });
          }
     }
 
