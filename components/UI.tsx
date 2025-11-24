@@ -6,7 +6,7 @@ import { resumeAudio, startAmbience } from '../utils/audio';
 
 const NARRATIVE_SCRIPT: Record<LevelType, string[]> = {
   PROLOGUE: ["这一次,我好像是毛绒绒的一滴物。", "按住左键向后拉，瞄准，松开 (Drag Back & Release).", "向着远处的强光前进 (Head towards the Light)."],
-  CHAPTER_1: ["湿季发生了，我和其他液体从这个星球的表面上冒出来。", "按住左键，我是追逐光芒的孩子 (Hold LMB to Lure).", "拖拽丝线，连接那些神经节点 (Drag to Connect)."],
+  CHAPTER_1: ["湿季发生了，我和其他液体从这个星球的表面上冒出来。", "按住左键，花纹之中总是蕴含着密码吧 (Hold LMB to Lure).", "拖拽丝线，连接那些神经节点 (Drag to Connect)."],
   NAME: ["didi, 你的名字是什么？", "什么是身体性的语言？", "戳破那些泡泡，收集紫色的碎片。"],
   CHEWING: ["挤过去，让自己变大。", "", "越咀嚼你就会拥有越多的液体。", "咀嚼，就是互相成就彼此的形状。"],
   WIND: ["因为液体干枯的时候，会往我的身体里缩，好痛好痛...", "我能感觉自己在慢慢地变小，慢慢地变暗...", "没关系，我在抗拒生命的时候已经感受到了更强的生命力..."],
@@ -30,7 +30,19 @@ const CHAPTER_TITLES: Record<LevelType, string> = {
 
 export const UI: React.FC = () => {
   const { currentLevel, narrativeIndex, isLevelComplete, startLevel, resetGame } = useGameStore();
-  const text = NARRATIVE_SCRIPT[currentLevel][Math.min(narrativeIndex, NARRATIVE_SCRIPT[currentLevel].length - 1)];
+  
+  // Detect touch device for context-sensitive text
+  const isTouch = typeof window !== 'undefined' && window.matchMedia("(pointer: coarse)").matches;
+
+  let text = NARRATIVE_SCRIPT[currentLevel][Math.min(narrativeIndex, NARRATIVE_SCRIPT[currentLevel].length - 1)];
+
+  // Dynamic Text Overrides
+  if (currentLevel === 'PROLOGUE' && narrativeIndex === 1 && isTouch) {
+      text = "按住向后拉，瞄准，松开 (Drag Back & Release).";
+  }
+  if (currentLevel === 'CHAPTER_1' && narrativeIndex === 1 && isTouch) {
+      text = "按住，花纹之中总是蕴含着密码吧 (Touch & Hold to Lure).";
+  }
 
   useEffect(() => { resumeAudio(); startAmbience(currentLevel); }, [currentLevel]);
 

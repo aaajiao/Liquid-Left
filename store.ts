@@ -244,7 +244,15 @@ export const useGameStore = create<GameState>((set, get) => ({
   isLevelComplete: false,
 
   setCursorWorldPos: (pos) => set({ cursorWorldPos: pos }),
-  setMouseDown: (isDown) => set({ isMouseDown: isDown }),
+  setMouseDown: (isDown) => {
+      const { currentLevel, narrativeIndex } = get();
+      let newIdx = narrativeIndex;
+      // Prologue: Update text immediately on first interaction (Mouse Down)
+      if (isDown && currentLevel === 'PROLOGUE' && narrativeIndex === 0) {
+          newIdx = 1;
+      }
+      set({ isMouseDown: isDown, narrativeIndex: newIdx });
+  },
   setHoveredNode: (id) => set({ hoveredNodeId: id }),
   setInteractiveHover: (isHover) => set({ isInteractiveHover: isHover }),
   
