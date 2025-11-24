@@ -61,27 +61,33 @@ export const UI: React.FC = () => {
   return (
     <>
     <div 
-      className="absolute inset-0 pointer-events-none flex flex-col justify-between p-8 z-10 font-serif select-none" 
+      className="absolute inset-0 pointer-events-none flex flex-col justify-between z-10 font-serif select-none p-4 md:p-6 lg:p-8" 
       onClick={() => resumeAudio()}
       style={{
-        paddingTop: 'calc(2rem + env(safe-area-inset-top))',
+        paddingTop: 'calc(1rem + env(safe-area-inset-top))',
         paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))',
-        paddingLeft: 'calc(2rem + env(safe-area-inset-left))',
-        paddingRight: 'calc(2rem + env(safe-area-inset-right))',
+        paddingLeft: 'calc(1rem + env(safe-area-inset-left))',
+        paddingRight: 'calc(1rem + env(safe-area-inset-right))',
       }}
     >
-      <div className="text-gray-600/60"><h1 className="text-2xl font-bold tracking-widest uppercase text-pink-900/50">{CHAPTER_TITLES[currentLevel]}</h1></div>
+      <div className="text-gray-600/60">
+        {/* Responsive Text: Mobile(xl) -> Tablet(xl) -> Desktop(2xl) */}
+        <h1 className="text-lg md:text-xl lg:text-2xl font-bold tracking-widest uppercase text-pink-900/50">
+            {CHAPTER_TITLES[currentLevel]}
+        </h1>
+      </div>
       
-      {/* Refactored: Removed absolute positioning for text container to respect parent flex and padding */}
-      <div className="w-full max-w-3xl px-4 text-center pointer-events-auto mx-auto mb-16">
+      {/* Refactored: 3-Tier Responsive padding and text sizes */}
+      <div className="w-full max-w-3xl px-2 md:px-4 text-center pointer-events-auto mx-auto mb-12 md:mb-16">
         <AnimatePresence mode='wait'>
             <motion.div key={`${currentLevel}-${text}`} initial={{ opacity: 0, filter: 'blur(10px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, filter: 'blur(10px)' }} transition={{ duration: 1.5 }}>
-                <p className="text-xl md:text-2xl text-slate-800/80 font-medium leading-relaxed drop-shadow-sm h-16">{text}</p>
+                {/* Responsive Text: Mobile(lg) -> Tablet(xl) -> Desktop(2xl) */}
+                <p className="text-lg md:text-xl lg:text-2xl text-slate-800/80 font-medium leading-relaxed drop-shadow-sm h-16">{text}</p>
                 {isLevelComplete && currentLevel !== 'SUN' && (
-                    <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={(e) => { e.stopPropagation(); handleNextLevel(); }} className="mt-8 text-pink-500 border border-pink-300 px-6 py-2 rounded-full hover:bg-pink-50 transition-colors">前往下一章 (Proceed)</motion.button>
+                    <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={(e) => { e.stopPropagation(); handleNextLevel(); }} className="mt-6 md:mt-8 text-pink-500 border border-pink-300 px-4 py-1.5 md:px-6 md:py-2 text-sm md:text-base rounded-full hover:bg-pink-50 transition-colors">前往下一章 (Proceed)</motion.button>
                 )}
                 {currentLevel === 'SUN' && isLevelComplete && (
-                    <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1, scale: 1.1 }} onClick={(e) => { e.stopPropagation(); resetGame(); }} className="mt-8 text-blue-400 hover:text-blue-600">[ 轮回 (Rebirth) ]</motion.button>
+                    <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1, scale: 1.1 }} onClick={(e) => { e.stopPropagation(); resetGame(); }} className="mt-6 md:mt-8 text-blue-400 hover:text-blue-600 text-sm md:text-base">[ 轮回 (Rebirth) ]</motion.button>
                 )}
             </motion.div>
         </AnimatePresence>

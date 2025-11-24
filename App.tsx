@@ -1,3 +1,4 @@
+
 import React, { Suspense, useRef, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrthographicCamera, Environment, BakeShadows, OrbitControls } from '@react-three/drei';
@@ -73,14 +74,42 @@ const DynamicBackground: React.FC = () => {
   return null;
 };
 
+// Hook to determine scale factor based on device type (Phone vs Tablet vs Desktop)
+const useScreenScaleFactor = () => {
+    const [scaleFactor, setScaleFactor] = useState(1);
+
+    useEffect(() => {
+        const updateScale = () => {
+            const width = window.innerWidth;
+            if (width < 768) {
+                // Phone (Portrait dominant): Zoom out significantly to fit width
+                setScaleFactor(0.65);
+            } else if (width < 1024) {
+                // Tablet (iPad Portrait/Small Landscape): Slight zoom out
+                setScaleFactor(0.85);
+            } else {
+                // Desktop
+                setScaleFactor(1.0);
+            }
+        };
+
+        window.addEventListener('resize', updateScale);
+        updateScale(); // Initial call
+        return () => window.removeEventListener('resize', updateScale);
+    }, []);
+
+    return scaleFactor;
+};
+
 const CameraController = () => {
     const { camera } = useThree();
     const playerPos = useGameStore((state) => state.playerPos);
     const currentLevel = useGameStore((state) => state.currentLevel);
     const controlsRef = useRef<any>(null);
     const [isAltPressed, setIsAltPressed] = useState(false);
+    const scaleFactor = useScreenScaleFactor();
     
-    // Detect mobile for specific tuning
+    // Detect mobile for specific tuning (controls sensitivity)
     const isTouch = typeof window !== 'undefined' && window.matchMedia("(pointer: coarse)").matches;
 
     useEffect(() => {
@@ -90,7 +119,6 @@ const CameraController = () => {
             // Keyboard Zoom: +/= and -/_
             if (e.key === '=' || e.key === '+') {
                 if (controlsRef.current) {
-                    // Unlimited zoom in/out for HOME level
                     const maxZ = currentLevel === 'HOME' ? Infinity : 200;
                     const newZoom = Math.min(camera.zoom * 1.1, maxZ);
                     (camera as THREE.OrthographicCamera).zoom = newZoom;
@@ -99,7 +127,6 @@ const CameraController = () => {
             }
             if (e.key === '-' || e.key === '_') {
                 if (controlsRef.current) {
-                    // Unlimited zoom in/out for HOME level
                     const minZ = currentLevel === 'HOME' ? 0 : 10;
                     const newZoom = Math.max(camera.zoom * 0.9, minZ);
                     (camera as THREE.OrthographicCamera).zoom = newZoom;
@@ -122,28 +149,30 @@ const CameraController = () => {
     useEffect(() => {
         if (!controlsRef.current) return;
         const offset = new THREE.Vector3(20, 20, 20);
-        let zoom = 40;
+        let baseZoom = 40;
         
-        if (currentLevel === 'PROLOGUE') { offset.set(15, 15, 15); zoom = 40; }
-        else if (currentLevel === 'CHEWING') { offset.set(10, 20, 10); zoom = 60; } // Close up
-        else if (currentLevel === 'TRAVEL') { offset.set(30, 30, 30); zoom = 25; } // Wide
-        else if (currentLevel === 'HOME') { offset.set(0, 30, 30); zoom = 30; }
-        else if (currentLevel === 'SUN') { offset.set(20, 10, 20); zoom = 35; }
+        if (currentLevel === 'PROLOGUE') { offset.set(15, 15, 15); baseZoom = 40; }
+        else if (currentLevel === 'CHEWING') { offset.set(10, 20, 10); baseZoom = 60; } // Close up
+        else if (currentLevel === 'TRAVEL') { offset.set(30, 30, 30); baseZoom = 25; } // Wide
+        else if (currentLevel === 'HOME') { offset.set(0, 30, 30); baseZoom = 30; }
+        else if (currentLevel === 'SUN') { offset.set(20, 10, 20); baseZoom = 35; }
+
+        // Apply device-specific scale factor
+        const finalZoom = baseZoom * scaleFactor;
 
         // Initial setup - instant jump
         camera.position.copy(playerPos).add(offset);
         camera.lookAt(playerPos);
-        camera.zoom = zoom;
+        (camera as THREE.OrthographicCamera).zoom = finalZoom;
         camera.updateProjectionMatrix();
         controlsRef.current.target.copy(playerPos);
         controlsRef.current.update();
-    }, [currentLevel]);
+    }, [currentLevel, scaleFactor]); // Re-run if level changes OR screen resizes
 
     useFrame(() => {
         if (controlsRef.current) {
             // Mobile Optimization: Very slow, cinematic lerp (0.01) to prevent motion sickness/jitter
-            // Desktop: Faster, snappy lerp (0.1)
-            const smoothFactor = isTouch ? 0.01 : 0.1;
+            const smoothFactor = isTouch ? 0.02 : 0.1;
             controlsRef.current.target.lerp(playerPos, smoothFactor);
             controlsRef.current.update();
         }
@@ -154,8 +183,6 @@ const CameraController = () => {
             ref={controlsRef} 
             enableDamping 
             dampingFactor={0.05}
-            // Fix: Use minZoom/maxZoom for OrthographicCamera instead of minDistance/maxDistance
-            // Completely unrestricted zoom for HOME level, restricted for others
             minZoom={currentLevel === 'HOME' ? 0 : 10} 
             maxZoom={currentLevel === 'HOME' ? Infinity : 200} 
             maxPolarAngle={Math.PI / 2 - 0.1} 
@@ -163,13 +190,10 @@ const CameraController = () => {
             zoomSpeed={isTouch ? 0.5 : 1.0}
             enablePan={false} // Disable pan to prevent conflict with drag-to-move
             mouseButtons={{ 
-                // Feature: If Alt is pressed, Left Click becomes Zoom (Dolly)
                 LEFT: isAltPressed ? THREE.MOUSE.DOLLY : THREE.MOUSE.PAN, 
                 MIDDLE: THREE.MOUSE.DOLLY, 
                 RIGHT: THREE.MOUSE.ROTATE 
             }} 
-            // On Mobile: Touch One is mapped to PAN but Pan is disabled -> No Camera Action -> Game Logic
-            // Touch Two is Rotate/Zoom
             touches={{ ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }}
         />
     );
@@ -178,12 +202,9 @@ const CameraController = () => {
 const App: React.FC = () => {
     const startLevel = useGameStore((state) => state.startLevel);
 
-    // Test Mode: Keyboard Shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            // Prevent interference with the new Zoom shortcut
             if (['=', '-', '+', '_'].includes(e.key)) return;
-
             switch(e.key) {
                 case '1': startLevel('PROLOGUE'); break;
                 case '2': startLevel('CHAPTER_1'); break;
