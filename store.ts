@@ -176,12 +176,77 @@ const generateTravelEnv = () => {
 const generateConnectionEnv = () => {
     const nodes: NodeData[] = [];
     const env: EnvFeature[] = [];
-    env.push({ id: 'plat-upper', type: 'ORGANIC_PLATFORM', position: [0, 2.5, -2], scale: [6, 0.5, 6], color: '#fff0f5' });
-    nodes.push({ id: 'n2-low-1', position: [-5, 0.5, 4], connected: false });
-    nodes.push({ id: 'n2-low-2', position: [5, 0.5, 4], connected: false });
-    nodes.push({ id: 'n2-mid', position: [0, 0.5, 0], connected: false });
-    nodes.push({ id: 'n2-high-1', position: [-2, 3, -2], connected: false });
-    nodes.push({ id: 'n2-high-2', position: [2, 3, -2], connected: false });
+    
+    // --- Option B: Spine/Spiral Structure ---
+    // Randomize node count (6 to 9)
+    const count = Math.floor(Math.random() * 4) + 6; 
+    
+    for (let i = 0; i < count; i++) {
+        let pos: [number, number, number] = [0, 0, 0];
+        let valid = false;
+        let attempts = 0;
+        
+        // Try to place nodes with minimum distance constraint
+        while (!valid && attempts < 20) {
+            const t = i / (count - 1); // 0.0 to 1.0
+            
+            // Generate base Spine curve (S-Shape or Spiral moving away from camera)
+            // Player starts at Z=8, so we generate from Z=8 down to Z=-8
+            const curveX = Math.sin(t * Math.PI * 1.5) * 5; 
+            const curveZ = 8 - (t * 16); 
+            
+            // Add Random Jitter (Organic Chaos)
+            const jitterX = (Math.random() - 0.5) * 4;
+            const jitterY = Math.random() * 5; // Height between 0.5 and 5.5
+            const jitterZ = (Math.random() - 0.5) * 4;
+            
+            pos = [
+                curveX + jitterX,
+                0.5 + jitterY, // Ensure it stays above ground
+                curveZ + jitterZ
+            ];
+            
+            // Check distance against existing nodes to prevent clutter
+            valid = true;
+            for (const n of nodes) {
+                const dist = Math.sqrt(Math.pow(pos[0]-n.position[0], 2) + Math.pow(pos[1]-n.position[1], 2) + Math.pow(pos[2]-n.position[2], 2));
+                if (dist < 4.0) { 
+                    valid = false;
+                    break;
+                }
+            }
+            attempts++;
+        }
+        
+        // Fallback: If 20 attempts fail, just place it anyway (chaos is okay)
+        nodes.push({ id: `n2-rnd-${i}`, position: pos, connected: false });
+        
+        // --- Random Environment Generation ---
+        // 60% chance to spawn a "Bone Fragment" platform near this node
+        if (Math.random() < 0.6) {
+             const pScale = 1.5 + Math.random() * 3;
+             env.push({ 
+                 id: `plat-rnd-${i}`, 
+                 type: 'ORGANIC_PLATFORM', 
+                 // Position slightly below node to look like support structure
+                 position: [pos[0] + (Math.random()-0.5), Math.max(0.2, pos[1] - 1.0), pos[2] + (Math.random()-0.5)], 
+                 scale: [pScale, 0.2 + Math.random() * 0.4, pScale], 
+                 color: '#fff0f5' 
+             });
+        }
+    }
+    
+    // Add some random floating debris for atmosphere
+    for (let j=0; j<5; j++) {
+        env.push({
+            id: `debris-${j}`,
+            type: 'ORGANIC_PLATFORM',
+            position: [(Math.random()-0.5)*15, 2 + Math.random()*5, (Math.random()-0.5)*15],
+            scale: [0.5, 0.5, 0.5],
+            color: '#fffff0'
+        });
+    }
+
     return { nodes, env };
 }
 
